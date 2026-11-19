@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>JSON Viewer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+    background: #1e1e2e;
+    color: #cdd6f4;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Header */
+  .header {
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(205,214,244,0.08);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .logo { font-size: 18px; font-weight: 700; color: #cba6f7; letter-spacing: -0.5px; }
+  .header-title { font-size: 15px; font-weight: 600; }
+  .header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+  /* Buttons */
+  .btn {
+    border: none; border-radius: 6px; padding: 6px 14px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s; font-family: inherit;
+  }
+  .btn:hover { filter: brightness(1.15); }
+  .btn-ghost { background: #313244; color: #a6adc8; }
+  .btn-primary { background: #cba6f7; color: #1e1e2e; width: 100%; padding: 10px 0; font-size: 14px; }
+  .btn-sm { padding: 3px 8px; font-size: 11px; }
+
+  /* Panels */
+  .panels { display: flex; flex: 1; min-height: 0; }
+
+  .panel { display: flex; flex-direction: column; min-width: 0; }
+  .panel-input { flex: 1; border-right: 1px solid rgba(205,214,244,0.08); }
+  .panel-tree { flex: 1.3; }
+
+  .panel-label {
+    padding: 8px 16px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.2px; color: #6c7086;
+    border-bottom: 1px solid rgba(205,214,244,0.06);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-shrink: 0;
+  }
+  .tree-actions { display: flex; gap: 4px; }
+
+  /* Input */
+  #json-input {
+    flex: 1; background: transparent; border: none; outline: none;
+    color: #a6adc8; font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px; line-height: 20px; padding: 16px; resize: none;
+  }
+  #json-input::placeholder { color: #585b70; }
+  .input-footer { padding: 10px 16px; border-top: 1px solid rgba(205,214,244,0.06); flex-shrink: 0; }
+
+  /* Tree */
+  #tree-output {
+    flex: 1; overflow: auto; padding: 16px;
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+    font-size: 13px; line-height: 22px;
+  }
+  .placeholder { color: #585b70; text-align: center; margin-top: 60px; font-size: 14px; font-family: 'Inter', system-ui, sans-serif; }
+  .placeholder b { color: #cba6f7; font-weight: 600; }
+
+  .error-box {
+    color: #f38ba8; background: rgba(243,139,168,0.08);
+    border: 1px solid rgba(243,139,168,0.2);
+    border-radius: 8px; padding: 12px 16px; font-size: 13px;
+  }
+  .error-box b { font-weight: 700; }
+
+  /* Tree nodes */
+  .tree-line { line-height: 22px; }
+  .tree-children { padding-left: 20px; border-left: 1px solid rgba(99,109,131,0.2); }
+  .toggle {
+    cursor: pointer; color: #61afef; font-weight: 700; user-select: none;
+    display: inline-block; width: 16px; text-align: center; font-size: 11px; margin-right: 2px;
+  }
+  .toggle:hover { color: #89b4fa; }
+  .k { color: #e06c75; }
+  .s { color: #98c379; }
+  .n { color: #d19a66; }
+  .b { color: #56b6c2; }
+  .nl { color: #abb2bf; font-style: italic; }
+  .br { color: #c678dd; }
+  .cm { color: #636d83; }
+  .idx { color: #636d83; font-size: 11px; opacity: 0.5; margin-right: 6px; }
+  .summary { color: #636d83; font-size: 12px; }
+
+  /* Responsive */
+  @media (max-width: 700px) {
+    .panels { flex-direction: column; }
+    .panel-input { border-right: none; border-bottom: 1px solid rgba(205,214,244,0.08); max-height: 40vh; }
+  }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <span class="logo">{ }</span>
+    <span class="header-title">JSON Viewer</span>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-ghost" onclick="loadSample()">Load Sample</button>
+    <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+  </div>
+</div>
+
+<div class="panels">
+  <!-- Left: Input -->
+  <div class="panel panel-input">
+    <div class="panel-label">Input</div>
+    <textarea id="json-input" placeholder="Paste JSON here… (Ctrl+Enter to format)" spellcheck="false"></textarea>
+    <div class="input-footer">
+      <button class="btn btn-primary" onclick="formatJson()">Format & View</button>
+    </div>
+  </div>
+
+  <!-- Right: Tree -->
+  <div class="panel panel-tree">
+    <div class="panel-label">
+      <span>Tree View</span>
+      <div class="tree-actions" id="tree-actions" style="display:none;">
+        <button class="btn btn-ghost btn-sm" onclick="expandAll()">Expand All</button>
+        <button class="btn btn-ghost btn-sm" onclick="collapseAll()">Collapse All</button>
+        <button class="btn btn-ghost btn-sm" id="copy-btn" onclick="copyFormatted()">Copy</button>
+      </div>
+    </div>
+    <div id="tree-output">
+      <div class="placeholder">Paste JSON on the left and hit <b>Format & View</b></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentParsed = null;
+
+const SAMPLE = '{"id":17136561904,"name":"env enable all","created_at":"2026-06-24T02:13:48+00:00","protection_rules":[{"id":58187972,"type":"branch_policy"},{"id":58199197,"type":"required_reviewers","reviewers":[{"type":"User","login":"tom-the-lizzard"},{"type":"User","login":"delianguyen"}]}]}';
+
+const input = document.getElementById('json-input');
+const output = document.getElementById('tree-output');
+const actions = document.getElementById('tree-actions');
+const copyBtn = document.getElementById('copy-btn');
+
+input.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') formatJson();
+});
+
+input.addEventListener('input', () => {
+  const text = input.value.trim();
+  if (!text) { clearAll(); return; }
+  try {
+    currentParsed = JSON.parse(text);
+    output.innerHTML = '';
+    output.appendChild(renderValue(currentParsed, 0));
+    actions.style.display = 'flex';
+  } catch (e) {
+    // Don't show error while typing — only on explicit format
+  }
+});
+
+function formatJson() {
+  const text = input.value.trim();
+  if (!text) { showError('Paste some JSON first'); return; }
+  try {
+    currentParsed = JSON.parse(text);
+    output.innerHTML = '';
+    output.appendChild(renderValue(currentParsed, 0));
+    actions.style.display = 'flex';
+  } catch (e) {
+    showError(e.message);
+  }
+}
+
+function showError(msg) {
+  currentParsed = null;
+  actions.style.display = 'none';
+  output.innerHTML = `<div class="error-box"><b>Parse Error:</b> ${escapeHtml(msg)}</div>`;
+}
+
+function clearAll() {
+  input.value = '';
+  currentParsed = null;
+  actions.style.display = 'none';
+  output.innerHTML = '<div class="placeholder">Paste JSON on the left and hit <b>Format & View</b></div>';
+}
+
+function loadSample() {
+  input.value = SAMPLE;
+  formatJson();
+}
+
+function copyFormatted() {
+  if (!currentParsed) return;
+  navigator.clipboard.writeText(JSON.stringify(currentParsed, null, 2));
+  copyBtn.textContent = 'Copied!';
+  copyBtn.style.color = '#a6e3a1';
+  setTimeout(() => { copyBtn.textContent = 'Copy'; copyBtn.style.color = ''; }, 1500);
+}
+
+function expandAll() {
+  output.querySelectorAll('.tree-children[data-collapsed="true"]').forEach(el => {
+    el.style.display = '';
+    el.dataset.collapsed = 'false';
+    const toggle = el.previousElementSibling?.querySelector('.toggle');
+    if (toggle) toggle.textContent = '▼';
+  });
+}
+
+function collapseAll() {
+  output.querySelectorAll('.tree-children').forEach(el => {
+    el.style.display = 'none';
+    el.dataset.collapsed = 'true';
+    const toggle = el.parentElement.querySelector('.toggle');
+    if (toggle) toggle.textContent = '▶';
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderValue(val, depth) {
+  if (val === null) { const s = document.createElement('span'); s.className = 'nl'; s.textContent = 'null'; return s; }
+  if (typeof val === 'boolean') { const s = document.createElement('span'); s.className = 'b'; s.textContent = val; return s; }
+  if (typeof val === 'number') { const s = document.createElement('span'); s.className = 'n'; s.textContent = val; return s; }
+  if (typeof val === 'string') { const s = document.createElement('span'); s.className = 's'; s.textContent = `"${val}"`; return s; }
+  if (Array.isArray(val)) return renderArray(val, depth);
+  return renderObject(val, depth);
+}
+
+function renderObject(obj, depth) {
+  const keys = Object.keys(obj);
+  const wrap = document.createElement('span');
+
+  if (keys.length === 0) { wrap.innerHTML = '<span class="br">{}</span>'; return wrap; }
+
+  const startCollapsed = false;
+  const summary = `${keys.length} key${keys.length > 1 ? 's' : ''}`;
+
+  // Toggle
+  const toggle = document.createElement('span');
+  toggle.className = 'toggle';
+  toggle.textContent = startCollapsed ? '▶' : '▼';
+
+  // Opening bracket
+  const open = document.createElement('span');
+  open.className = 'br';
+  open.textContent = '{';
+
+  // Summary (shown when collapsed)
+  const sumSpan = document.createElement('span');
+  sumSpan.className = 'summary';
+  sumSpan.textContent = ` ${summary} `;
+  sumSpan.style.display = startCollapsed ? '' : 'none';
+
+  // Close bracket inline (shown when collapsed)
+  const closeInline = document.createElement('span');
+  closeInline.className = 'br';
+  closeInline.textContent = '}';
+  closeInline.style.display = startCollapsed ? '' : 'none';
+
+  // Children container
+  const children = document.createElement('div');
+  children.className = 'tree-children';
+  children.dataset.collapsed = startCollapsed;
+  children.style.display = startCollapsed ? 'none' : '';
+
+  keys.forEach((key, i) => {
+    const line = document.createElement('div');
+    line.className = 'tree-line';
+    const k = document.createElement('span'); k.className = 'k'; k.textContent = `"${key}"`;
+    const colon = document.createElement('span'); colon.className = 'cm'; colon.textContent = ': ';
+    line.appendChild(k);
+    line.appendChild(colon);
+    line.appendChild(renderValue(obj[key], depth + 1));
+    if (i < keys.length - 1) { const comma = document.createElement('span'); comma.className = 'cm'; comma.textContent = ','; line.appendChild(comma); }
+    children.appendChild(line);
+  });
+
+  // Close bracket block (shown when expanded)
+  const closeBlock = document.createElement('span');
+  closeBlock.className = 'br';
+  closeBlock.textContent = '}';
+  closeBlock.style.display = startCollapsed ? 'none' : '';
+
+  toggle.addEventListener('click', () => {
+    const collapsed = children.dataset.collapsed === 'true';
+    children.dataset.collapsed = !collapsed;
+    children.style.display = collapsed ? '' : 'none';
+    toggle.textContent = collapsed ? '▼' : '▶';
+    sumSpan.style.display = collapsed ? 'none' : '';
+    closeInline.style.display = collapsed ? 'none' : '';
+    closeBlock.style.display = collapsed ? '' : 'none';
+  });
+
+  wrap.appendChild(toggle);
+  wrap.appendChild(open);
+  wrap.appendChild(sumSpan);
+  wrap.appendChild(closeInline);
+  wrap.appendChild(children);
+  wrap.appendChild(closeBlock);
+  return wrap;
+}
+
+function renderArray(arr, depth) {
+  const wrap = document.createElement('span');
+
+  if (arr.length === 0) { wrap.innerHTML = '<span class="br">[]</span>'; return wrap; }
+
+  const startCollapsed = false;
+  const summary = `${arr.length} item${arr.length > 1 ? 's' : ''}`;
+
+  const toggle = document.createElement('span');
+  toggle.className = 'toggle';
+  toggle.textContent = startCollapsed ? '▶' : '▼';
+
+  const open = document.createElement('span');
+  open.className = 'br';
+  open.textContent = '[';
+
+  const sumSpan = document.createElement('span');
+  sumSpan.className = 'summary';
+  sumSpan.textContent = ` ${summary} `;
+  sumSpan.style.display = startCollapsed ? '' : 'none';
+
+  const closeInline = document.createElement('span');
+  closeInline.className = 'br';
+  closeInline.textContent = ']';
+  closeInline.style.display = startCollapsed ? '' : 'none';
+
+  const children = document.createElement('div');
+  children.className = 'tree-children';
+  children.dataset.collapsed = startCollapsed;
+  children.style.display = startCollapsed ? 'none' : '';
+
+  arr.forEach((item, i) => {
+    const line = document.createElement('div');
+    line.className = 'tree-line';
+    const idx = document.createElement('span'); idx.className = 'idx'; idx.textContent = i;
+    line.appendChild(idx);
+    line.appendChild(renderValue(item, depth + 1));
+    if (i < arr.length - 1) { const comma = document.createElement('span'); comma.className = 'cm'; comma.textContent = ','; line.appendChild(comma); }
+    children.appendChild(line);
+  });
+
+  const closeBlock = document.createElement('span');
+  closeBlock.className = 'br';
+  closeBlock.textContent = ']';
+  closeBlock.style.display = startCollapsed ? 'none' : '';
+
+  toggle.addEventListener('click', () => {
+    const collapsed = children.dataset.collapsed === 'true';
+    children.dataset.collapsed = !collapsed;
+    children.style.display = collapsed ? '' : 'none';
+    toggle.textContent = collapsed ? '▼' : '▶';
+    sumSpan.style.display = collapsed ? 'none' : '';
+    closeInline.style.display = collapsed ? 'none' : '';
+    closeBlock.style.display = collapsed ? '' : 'none';
+  });
+
+  wrap.appendChild(toggle);
+  wrap.appendChild(open);
+  wrap.appendChild(sumSpan);
+  wrap.appendChild(closeInline);
+  wrap.appendChild(children);
+  wrap.appendChild(closeBlock);
+  return wrap;
+}
+</script>
+</body>
+</html>
